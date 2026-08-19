@@ -1,4 +1,23 @@
-aws_region       = "us-east-1"
-key_name         = "my-existing-ec2-keypair"
-instance_type    = "t3.small"
-allowed_ssh_cidr = "203.0.113.10/32"
+aws_region             = "us-east-1"
+key_pair_mode          = "create"
+new_key_pair_name      = "jenkins-key"
+vpc_mode               = "default"
+security_group_mode    = "create"
+instance_type          = "t3.small"
+allowed_ssh_cidr       = "203.0.113.10/32"
+
+# For an existing key pair, use:
+# key_pair_mode   = "existing"
+# existing_key_name = "my-existing-ec2-keypair"
+
+# For a new VPC, use:
+# vpc_mode = "create"
+
+# For an existing VPC and public subnet, use:
+# vpc_mode          = "existing"
+# existing_vpc_id   = "vpc-0123456789abcdef0"
+# existing_subnet_id = "subnet-0123456789abcdef0"
+
+# For an existing security group, use:
+# security_group_mode       = "existing"
+# existing_security_group_id = "sg-0123456789abcdef0"
