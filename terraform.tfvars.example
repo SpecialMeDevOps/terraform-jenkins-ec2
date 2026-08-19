@@ -1,0 +1,4 @@
+aws_region       = "us-east-1"
+key_name         = "my-existing-ec2-keypair"
+instance_type    = "t3.small"
+allowed_ssh_cidr = "203.0.113.10/32"
