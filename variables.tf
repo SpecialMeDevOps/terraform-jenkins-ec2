@@ -13,7 +13,7 @@ variable "name_prefix" {
 variable "key_pair_mode" {
   description = "Use an existing EC2 key pair or create one (private key is stored in state)."
   type        = string
-  default     = "existing"
+  default     = "create"
   validation {
     condition     = contains(["create", "existing"], var.key_pair_mode)
     error_message = "key_pair_mode must be create or existing."

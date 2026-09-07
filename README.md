@@ -74,15 +74,24 @@ pair. Use AWS CLI configuration, environment variables, or another standard
 AWS provider credential chain. Never put credentials in `terraform.tfvars`,
 user data, GitHub Actions, or this repository.
 
-An existing EC2 key pair is recommended. If `key_pair_mode = "create"`, Terraform
-creates an ED25519 key and exposes the private key as a sensitive output; because
-that value is stored in state, protect state as carefully as a secret.
+By default, Terraform creates an ED25519 key pair named `jenkins-lab-key` and
+uses it for both instances. After apply, save the sensitive private-key output
+locally and never commit it:
+
+```bash
+terraform output -raw generated_private_key > jenkins-lab-key.pem
+chmod 400 jenkins-lab-key.pem
+```
+
+The private key is stored in Terraform state, so protect the state as carefully
+as a secret. An existing key pair can still be used by setting
+`key_pair_mode = "existing"` and providing `existing_key_name`.
 
 ## Configuration and deployment
 
 ```bash
 cp terraform.tfvars.example terraform.tfvars
-# Set existing_key_name and narrow allowed_ssh_cidr/allowed_jenkins_cidr.
+# Set narrow allowed_ssh_cidr/allowed_jenkins_cidr values.
 terraform init
 terraform fmt -recursive
 terraform validate
@@ -103,6 +112,13 @@ Important inputs include:
 The default security group allows SSH and Jenkins only from the two configured
 CIDRs. HTTP/HTTPS ingress is disabled. Do not use `0.0.0.0/0` for administration
 or Jenkins except briefly in an isolated test.
+
+Availability Zones are selected automatically. Terraform queries AWS for
+available offerings for both instance types, intersects those AZs with the
+region's available AZs, and then selects the first compatible subnet. This
+prevents a subnet such as `us-east-1e` from being selected when `t3.medium` is
+unsupported there. For an existing subnet, Terraform preserves that subnet and
+the checks fail early if its AZ cannot run both instance types.
 
 ## Outputs, IPs, and SSH
 
