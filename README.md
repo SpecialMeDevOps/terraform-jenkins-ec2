@@ -182,6 +182,11 @@ The workflow has read-only contents permission and performs no plan or apply.
 This is **CI** (formatting, static analysis, and validation), not deployment
 **CD**. Jenkins pipelines, artifact promotion, approvals, drift detection, and
 automatic infrastructure deployment are intentionally outside this repository.
+Checkov skips only documented context-dependent findings: public IPs and the
+optional public subnet support lab SSH, HTTP/HTTPS is explicitly opt-in,
+unrestricted outbound traffic is needed for package updates, and VPC flow logs
+or default-VPC controls require account-wide resources outside this lab. EC2
+detailed monitoring and EBS optimization are enabled directly.
 
 ## Security and state
 

@@ -38,6 +38,8 @@ resource "aws_instance" "controller" {
   associate_public_ip_address = var.associate_public_ip_address
   key_name                    = local.key_name
   iam_instance_profile        = local.instance_profile
+  monitoring                  = true
+  ebs_optimized               = true
   user_data                   = file("${path.module}/scripts/controller-user-data.sh")
   user_data_replace_on_change = true
 
@@ -67,6 +69,8 @@ resource "aws_instance" "worker" {
   associate_public_ip_address = var.associate_public_ip_address
   key_name                    = local.key_name
   iam_instance_profile        = local.instance_profile
+  monitoring                  = true
+  ebs_optimized               = true
   user_data                   = file("${path.module}/scripts/worker-user-data.sh")
   user_data_replace_on_change = true
 

@@ -31,3 +31,6 @@ jobs:
           directory: .
           framework: terraform
           quiet: true
+          # These checks represent deliberate lab-mode choices or controls
+          # that require account-wide networking/logging resources not in scope.
+          skip_check: CKV_AWS_88,CKV_AWS_130,CKV_AWS_260,CKV_AWS_382,CKV2_AWS_5,CKV2_AWS_11,CKV2_AWS_12
