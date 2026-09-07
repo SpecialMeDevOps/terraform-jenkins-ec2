@@ -41,7 +41,8 @@ resource "aws_instance" "controller" {
   monitoring                  = true
   ebs_optimized               = true
   user_data                   = file("${path.module}/scripts/controller-user-data.sh")
-  user_data_replace_on_change = true
+  # Update bootstrap in place (stop/start) rather than replacing a reachable host.
+  user_data_replace_on_change = false
 
   metadata_options {
     http_endpoint = "enabled"
@@ -72,7 +73,7 @@ resource "aws_instance" "worker" {
   monitoring                  = true
   ebs_optimized               = true
   user_data                   = file("${path.module}/scripts/worker-user-data.sh")
-  user_data_replace_on_change = true
+  user_data_replace_on_change = false
 
   metadata_options {
     http_endpoint = "enabled"

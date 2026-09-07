@@ -111,15 +111,25 @@ variable "associate_public_ip_address" {
 }
 
 variable "allowed_ssh_cidr" {
-  description = "Single CIDR allowed to SSH (use your public IP/32)."
+  description = "CIDR allowed to SSH (use the operator's public IP/32, or an approved VPN range)."
   type        = string
-  default     = "10.0.0.0/8"
+  default     = null
+  nullable    = true
+  validation {
+    condition     = var.allowed_ssh_cidr != null
+    error_message = "Set allowed_ssh_cidr explicitly to an operator or VPN CIDR; it must not be left unset."
+  }
 }
 
 variable "allowed_jenkins_cidr" {
-  description = "Single CIDR allowed to reach Jenkins on TCP/8080."
+  description = "CIDR allowed to reach Jenkins on TCP/8080."
   type        = string
-  default     = "10.0.0.0/8"
+  default     = null
+  nullable    = true
+  validation {
+    condition     = var.allowed_jenkins_cidr != null
+    error_message = "Set allowed_jenkins_cidr explicitly to an approved CIDR; it must not be left unset."
+  }
 }
 
 variable "enable_public_web_ingress" {

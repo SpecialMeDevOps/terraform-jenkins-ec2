@@ -3,8 +3,8 @@
 Terraform provisions a small, repeatable DevOps lab in AWS: two Ubuntu Server
 24.04 LTS EC2 instances, a configurable network/security group, and optional
 least-privilege IAM instance profiles. The hosts are intentionally separate.
-The controller and worker both install Jenkins and the same toolchain, but this
-repository does **not** configure Jenkins controller/agent communication.
+The controller runs Jenkins. The worker is a separate build host and does not
+install Jenkins.
 
 ## Status and scope
 
@@ -20,8 +20,8 @@ flowchart LR
   operator[Operator] -->|SSH 22, restricted CIDR| sg[EC2 security group]
   operator -->|HTTP 8080, restricted CIDR| sg
   sg --> controller[controller\nUbuntu 24.04\nJenkins + tools]
-  sg --> worker[worker/lab node\nUbuntu 24.04\nJenkins + tools]
-  controller -.->|No agent enrollment configured| worker
+  sg --> worker[worker/lab node\nUbuntu 24.04\nBuild tools only]
+  controller -.->|Secure agent enrollment externalized| worker
   controller --> role[IAM instance profile\nSSM core only]
   worker --> role
   role --> ssm[AWS Systems Manager]
@@ -60,9 +60,9 @@ possible. Public IP assignment is configurable.
 | Operating system | Ubuntu Server 24.04 LTS amd64 AMI |
 | Compute | Two configurable EC2 instances (default `t3.medium`) |
 | Containers | Docker Engine from Docker's official apt repository and Compose plugin |
-| Kubernetes tools | Stable `kubectl` release and Helm from the official repository |
+| Kubernetes tools | Stable `kubectl` and Helm; kubeadm/kubelet are not installed by default |
 | Cloud tooling | AWS CLI v2 official installer and Terraform HashiCorp apt repository |
-| Automation | Jenkins and Java 21 on both hosts |
+| Automation | Jenkins and Java 21 on controller; Java 21 on worker |
 | Access | EC2 key pair, IMDSv2, optional SSM |
 | Static CI | GitHub Actions, TFLint, Checkov |
 
@@ -105,7 +105,8 @@ Important inputs include:
 * `vpc_mode`, `existing_vpc_id`, `existing_subnet_id`
 * `controller_instance_type`, `worker_instance_type`, `root_volume_size`
 * `key_pair_mode`, `existing_key_name`, `new_key_pair_name`
-* `allowed_ssh_cidr` and `allowed_jenkins_cidr`
+* `allowed_ssh_cidr` and `allowed_jenkins_cidr` (required; set these to the
+  operator/VPN CIDRs, normally `x.x.x.x/32`, rather than relying on a broad default)
 * `associate_public_ip_address` and `enable_public_web_ingress`
 * `create_iam_instance_profile` or `iam_instance_profile_name`
 
@@ -119,6 +120,9 @@ region's available AZs, and then selects the first compatible subnet. This
 prevents a subnet such as `us-east-1e` from being selected when `t3.medium` is
 unsupported there. For an existing subnet, Terraform preserves that subnet and
 the checks fail early if its AZ cannot run both instance types.
+When public IP assignment is enabled, Terraform also verifies that the selected
+subnet has a usable default internet/NAT route. This catches the common SSH
+failure where an instance has a public address but its subnet is private.
 
 ## Outputs, IPs, and SSH
 
@@ -151,7 +155,10 @@ Terraform passes `scripts/controller-user-data.sh` and
 package/repository installation, log to
 `/var/log/jenkins-controller-bootstrap.log` or
 `/var/log/jenkins-worker-bootstrap.log`, fail fast, and print a verification
-summary. They use `/var/lib/jenkins-lab/downloads` for downloads and do not
+summary. The controller installs Java 21, Git, Docker Engine/Compose, AWS CLI v2,
+Terraform, kubectl, Helm, and Jenkins. The worker installs Java 21, Git, Docker
+Engine/Compose, AWS CLI v2, Terraform, kubectl, and Helm. They use
+`/var/lib/jenkins-lab/downloads` for downloads and do not
 write credentials.
 
 On either host, start a new SSH session after Docker group membership changes:
@@ -164,7 +171,6 @@ kubectl version --client
 helm version
 aws --version
 terraform version
-systemctl is-active jenkins
 ```
 
 Retrieve the initial Jenkins password only on the relevant host:
@@ -175,12 +181,14 @@ sudo cat /var/lib/jenkins/secrets/initialAdminPassword
 
 ## Jenkins controller versus worker
 
-The `controller` is the recommended Jenkins UI host and is the target of the
-`controller_jenkins_url` output. The `worker` is a second practice environment
-with Jenkins installed for symmetry and independent experimentation. It is not
-automatically a Jenkins build agent: there is no agent port rule, controller
-URL, node definition, secret, or SSH key exchange. If agent enrollment is later
-desired, implement it explicitly with a least-privilege, documented design.
+The `controller` is the Jenkins UI and orchestration host. The `worker` contains
+Java and the build tools but no Jenkins service. This repository deliberately
+does not place an agent secret, SSH private key, or Jenkins credential in
+Terraform. To connect the worker, use Jenkins' SSH Build Agents plugin with a
+credential stored in Jenkins Credentials, or use an inbound WebSocket agent with
+the secret injected at runtime from AWS Secrets Manager/SSM. The worker can
+then be registered in Jenkins using that externalized credential. Installing
+Jenkins on the worker alone would not create a Jenkins worker.
 
 ## CI flow and CI/CD distinction
 
@@ -218,6 +226,29 @@ do not commit `terraform.tfvars`, state files, generated keys, or logs.
   `allowed_jenkins_cidr`, `systemctl status jenkins`, and the bootstrap log.
 * **SSH denied:** check the key pair, effective public IP, subnet route, and
   `allowed_ssh_cidr`; avoid changing the group to world-open.
+  Confirm the instance is running Ubuntu and use the `ubuntu` user:
+
+  ```bash
+  ssh -i jenkins-lab-key.pem ubuntu@<public-ip>
+  ```
+
+  In AWS, confirm the instance has the expected public IPv4 address, the
+  security group allows TCP 22 from your current public IP, the subnet route
+  table has `0.0.0.0/0` to an Internet Gateway (or use SSM/VPN for private
+  subnets), and the network ACL permits return traffic. Confirm the EC2
+  `key_name` matches the private key; user data cannot repair a wrong key pair.
+  Useful checks are:
+
+  ```bash
+  aws ec2 describe-instances --instance-ids <instance-id> \
+    --query 'Reservations[0].Instances[0].{State:State.Name,PublicIp:PublicIpAddress,Subnet:SubnetId,Key:KeyName,SG:SecurityGroups[*].GroupId}'
+  aws ec2 describe-route-tables --filters Name=association.subnet-id,Values=<subnet-id>
+  aws ec2 describe-network-acls --filters Name=association.subnet-id,Values=<subnet-id>
+  ```
+
+  The default network ACL allows traffic unless it was changed outside this
+  project. Existing VPC, subnet, route table, and NACL changes are not managed
+  or recreated by this configuration.
 * **Tool missing:** inspect the relevant bootstrap log and rerun only after
   correcting the underlying apt/network issue; user data runs at first boot.
 * **Docker permission denied:** reconnect so the `ubuntu` group membership is

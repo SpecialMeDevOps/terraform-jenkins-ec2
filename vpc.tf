@@ -53,6 +53,20 @@ data "aws_subnet" "existing" {
   id    = var.existing_subnet_id
 }
 
+data "aws_route_table" "selected" {
+  for_each       = var.vpc_mode == "create" ? toset([]) : toset(data.aws_route_tables.vpc[0].ids)
+  route_table_id = each.value
+}
+
+data "aws_route_tables" "vpc" {
+  count = var.vpc_mode == "create" ? 0 : 1
+
+  filter {
+    name   = "vpc-id"
+    values = [local.vpc_id]
+  }
+}
+
 locals {
   create_vpc = var.vpc_mode == "create"
   supported_azs = sort(setintersection(
@@ -67,6 +81,15 @@ locals {
   selected_az = var.vpc_mode == "create" ? local.supported_azs[0] : var.vpc_mode == "default" ? data.aws_subnet.default[local.default_compatible_subnets[0]].availability_zone : data.aws_subnet.existing[0].availability_zone
   vpc_id      = var.vpc_mode == "default" ? data.aws_vpcs.default[0].ids[0] : var.vpc_mode == "existing" ? var.existing_vpc_id : aws_vpc.jenkins[0].id
   subnet_id   = var.vpc_mode == "default" ? local.default_compatible_subnets[0] : var.vpc_mode == "existing" ? var.existing_subnet_id : aws_subnet.jenkins[0].id
+  has_internet_route = var.vpc_mode == "create" || anytrue(flatten([
+    for table in data.aws_route_table.selected : [
+      for route in table.routes : route.cidr_block == "0.0.0.0/0" && (
+        route.gateway_id != null || route.nat_gateway_id != null || route.egress_only_gateway_id != null
+        ) && anytrue([
+          for association in table.associations : association.main || association.subnet_id == local.subnet_id
+      ])
+    ]
+  ]))
 }
 
 check "compatible_instance_availability" {
@@ -87,6 +110,13 @@ check "compatible_existing_subnet" {
   assert {
     condition     = var.vpc_mode != "existing" || contains(local.supported_azs, data.aws_subnet.existing[0].availability_zone)
     error_message = "The existing subnet's Availability Zone does not support both configured instance types."
+  }
+}
+
+check "public_network_reachability" {
+  assert {
+    condition     = !var.associate_public_ip_address || local.has_internet_route
+    error_message = "The selected subnet has no usable default route. Disable public IPs for private networking or select/configure a subnet with an internet/NAT route."
   }
 }
 

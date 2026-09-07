@@ -30,14 +30,14 @@ output "worker_private_ip" {
 
 output "controller_jenkins_url" {
   description = "Jenkins UI URL; access is controlled by allowed_jenkins_cidr."
-  value       = "http://${aws_instance.controller.public_ip}:8080"
+  value       = aws_instance.controller.public_ip == null ? null : "http://${aws_instance.controller.public_ip}:8080"
 }
 
 output "ssh_commands" {
   description = "SSH commands for both hosts."
   value = {
-    controller = "ssh -i <private-key> ubuntu@${aws_instance.controller.public_ip}"
-    worker     = "ssh -i <private-key> ubuntu@${aws_instance.worker.public_ip}"
+    controller = aws_instance.controller.public_ip == null ? "Use SSM/VPN to reach ${aws_instance.controller.private_ip}" : "ssh -i <private-key> ubuntu@${aws_instance.controller.public_ip}"
+    worker     = aws_instance.worker.public_ip == null ? "Use SSM/VPN to reach ${aws_instance.worker.private_ip}" : "ssh -i <private-key> ubuntu@${aws_instance.worker.public_ip}"
   }
 }
 
