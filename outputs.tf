@@ -1,25 +1,48 @@
-output "instance_id" {
-  description = "ID of the Jenkins EC2 instance."
-  value       = aws_instance.jenkins.id
+output "controller_instance_id" {
+  description = "Controller EC2 instance ID."
+  value       = aws_instance.controller.id
 }
 
-output "public_ip" {
-  description = "Public IP address used to connect to Jenkins and SSH."
-  value       = aws_instance.jenkins.public_ip
+output "controller_public_ip" {
+  description = "Controller public IP, if public addressing is enabled."
+  value       = aws_instance.controller.public_ip
 }
 
-output "jenkins_url" {
-  description = "Jenkins web interface URL."
-  value       = "http://${aws_instance.jenkins.public_ip}:8080"
+output "controller_private_ip" {
+  description = "Controller private IP address."
+  value       = aws_instance.controller.private_ip
 }
 
-output "ssh_command" {
-  description = "Example SSH command for the Amazon Linux host."
-  value       = "ssh -i <path-to-private-key> ec2-user@${aws_instance.jenkins.public_ip}"
+output "worker_instance_id" {
+  description = "Worker/lab EC2 instance ID."
+  value       = aws_instance.worker.id
+}
+
+output "worker_public_ip" {
+  description = "Worker public IP, if public addressing is enabled."
+  value       = aws_instance.worker.public_ip
+}
+
+output "worker_private_ip" {
+  description = "Worker private IP address."
+  value       = aws_instance.worker.private_ip
+}
+
+output "controller_jenkins_url" {
+  description = "Jenkins UI URL; access is controlled by allowed_jenkins_cidr."
+  value       = "http://${aws_instance.controller.public_ip}:8080"
+}
+
+output "ssh_commands" {
+  description = "SSH commands for both hosts."
+  value = {
+    controller = "ssh -i <private-key> ubuntu@${aws_instance.controller.public_ip}"
+    worker     = "ssh -i <private-key> ubuntu@${aws_instance.worker.public_ip}"
+  }
 }
 
 output "generated_private_key" {
-  description = "Private key for the generated EC2 key pair. Save it securely when key_pair_mode is create."
+  description = "Sensitive private key generated for the EC2 key pair, when enabled."
   value       = var.key_pair_mode == "create" ? tls_private_key.jenkins[0].private_key_openssh : null
   sensitive   = true
 }
